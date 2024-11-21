@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Infinite Canvas</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    #toolbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: #f0f0f0;
+      padding: 10px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+    }
+    .tool-btn {
+      padding: 5px 15px;
+      margin-right: 10px;
+      cursor: pointer;
+      border: 1px solid #ccc;
+      background: white;
+      border-radius: 4px;
+    }
+    .tool-btn.active {
+      background: #007bff;
+      color: white;
+      border-color: #0056b3;
+    }
+    canvas {
+      display: block;
+      cursor: grab;
+    }
+    .tool-group {
+      display: flex;
+      align-items: center;
+      margin-right: 20px;
+      padding-right: 20px;
+      border-right: 1px solid #ccc;
+    }
+    .color-picker {
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      margin-right: 10px;
+      border: 1px solid #ccc;
+    }
+    .size-select {
+      padding: 5px;
+      margin-right: 10px;
+    }
+    .text-input {
+      position: absolute;
+      background: transparent;
+      border: none;
+      outline: none;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      display: none;
+      z-index: 1001;
+      min-width: 50px;
+      resize: none;
+      padding: 5px;
+      margin: 0;
+      overflow: hidden;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    canvas.move-tool { cursor: grab; }
+    canvas.move-tool:active { cursor: grabbing; }
+    canvas.edit-text-tool { cursor: text; }
+    canvas.add-node-tool { cursor: crosshair; }
+    canvas.add-edge-tool { cursor: pointer; }
+    #zoomLevel {
+      font-family: monospace;
+      padding: 5px 10px;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      min-width: 60px;
+      text-align: center;
+      display: inline-block;
+    }
+    .color-presets {
+      display: flex;
+      gap: 4px;
+    }
+    .color-preset {
+      width: 20px;
+      height: 20px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+      padding: 0;
+      transition: transform 0.1s;
+    }
+    .color-preset:hover { transform: scale(1.1); }
+    .color-preset.active { border: 2px solid #007bff; }
+    .edge-select {
+      padding: 5px 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      background: white;
+      margin-right: 10px;
+    }
+    .sidebar {
+      position: fixed;
+      right: -300px;
+      top: 0;
+      width: 300px;
+      min-width: 200px;
+      height: 100%;
+      background: white;
+      box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+      z-index: 1001;
+      transition: right 0.3s ease;
+    }
+    .sidebar.open { right: 0; }
+    .sidebar-toggle {
+      position: absolute;
+      left: -40px;
+      top: 50%;
+      width: 40px;
+      height: 40px;
+      background: white;
+      box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 24px;
+      border-radius: 4px 0 0 4px;
+      transition: left 0.3s ease;
+    }
+    .sidebar-content {
+      padding: 20px;
+      height: 100%;
+      overflow-x: auto;
+      overflow-y: auto;
+      box-sizing: border-box;
+      padding-top: 20px;
+      background: #f8f9fa;
+    }
+    .sidebar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      background: white;
+      padding: 15px 20px;
+      border-bottom: 1px solid #eee;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    .sidebar-buttons {
+      display: flex;
+      gap: 10px;
+    }
+    .sidebar-buttons .tool-btn {
+      font-size: 12px;
+      padding: 4px 8px;
+    }
+    .node-list {
+      font-family: Arial, sans-serif;
+    }
+    .node-item {
+      padding: 8px 12px;
+      margin: 4px 0;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+      overflow: visible;
+      width: auto;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      font-size: 14px;
+      position: relative;
+    }
+    .node-item:hover {
+      transform: translateX(2px);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .node-item.selected {
+      border-color: #007bff;
+      box-shadow: 0 0 0 1px #007bff;
+    }
+    .sidebar-resizer:hover { background: rgba(0, 0, 0, 0.1); }
+    .sidebar-resizer {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 4px;
+        height: 100%;
+        cursor: ew-resize;
+        background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <div class="tool-group">
+      <button class="tool-btn active" data-tool="move">Move</button>
+      <button class="tool-btn" data-tool="select">Select</button>
+      <button class="tool-btn" data-tool="addNode">Add Node</button>
+      <button class="tool-btn" data-tool="addEdge">Edge</button>
+      <button class="tool-btn" data-tool="editText">Edit Text</button>
+    </div>
+    <div class="tool-group">
+      <select id="edgeStyle" class="edge-select">
+        <option value="normal">Normal Edge</option>
+        <option value="arrow">Arrow →</option>
+      </select>
+    </div>
+    <div class="tool-group">
+      <div style="display: flex; flex-direction: column; gap: 5px;">
+        <div>
+          <label style="font-size: 12px;">Text Color</label>
+          <input type="color" class="color-picker" id="textColor" value="#000000">
+        </div>
+        <div>
+          <label style="font-size: 12px;">Node Color</label>
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <input type="color" class="color-picker" id="nodeColor" value="#FECF4D">
+            <div class="color-presets">
+              <button class="color-preset" style="background-color: #F74B4B"></button>
+              <button class="color-preset" style="background-color: #F68A49"></button>
+              <button class="color-preset" style="background-color: #FECF4D"></button>
+              <button class="color-preset" style="background-color: #E9FE4D"></button>
+              <button class="color-preset" style="background-color: #A6FE4D"></button>
+              <button class="color-preset" style="background-color: #62FE4D"></button>
+              <button class="color-preset" style="background-color: #4DFEBA"></button>
+              <button class="color-preset" style="background-color: #4DFEFB"></button>
+              <button class="color-preset" style="background-color: #4D82FE"></button>
+              <button class="color-preset" style="background-color: #9D4DFE"></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <select class="size-select" id="fontSize">
+        <option value="10">10px</option>
+        <option value="20">20px</option>
+        <option value="50">50px</option>
+        <option value="90">90px</option>   
+        <option value="140">140px</option>
+        <option value="200">200px</option>
+        <option value="270">270px</option>
+        <option value="350">350px</option>
+        <option value="440">440px</option>
+        <option value="540">540px</option>
+        <option value="650">650px</option>
+        <option value="770">770px</option>
+        <option value="900">900px</option>
+        <option value="1100">1100px</option>
+        <option value="1400">1400px</option>
+        <option value="1800">1800px</option>
+        <option value="2300">2300px</option>
+        <option value="2900">2900px</option>
+        <option value="3600">3600px</option>
+        <option value="4400">4400px</option>
+        <option value="5300">5300px</option>
+        <option value="6300">6300px</option>
+        <option value="8000">8000px</option>
+        <option value="10000">10000px</option>
+      </select>
+    </div>
+    <div class="tool-group">
+      <span id="zoomLevel">100%</span>
+    </div>
+    <div class="tool-group">
+      <button class="tool-btn" id="downloadSvg">Download SVG</button>
+      <button class="tool-btn" id="clearAll" style="background-color: #ff4444; color: white; border-color: #cc0000;">Clear All</button>
+    </div>
+  </div>
+  <input type="text" class="text-input" id="textInput">
+  <canvas id="mindmapCanvas"></canvas>
+  <div id="sidebar" class="sidebar">
+    <div class="sidebar-resizer" id="sidebarResizer"></div>
+    <div class="sidebar-toggle" id="sidebarToggle">≡</div>
+    <div class="sidebar-content">
+      <div class="sidebar-header">
+        <h3>Node Structure</h3>
+        <div class="sidebar-buttons">
+          <button class="tool-btn" id="exportJSON">Export</button>
+          <button class="tool-btn" id="importJSON">Import</button>
+          <input type="file" id="fileInput" style="display: none" accept=".json">
+        </div>
+      </div>
+      <div id="nodeList" class="node-list"></div>
+    </div>
+  </div>
+  <script src="NodeRenderer.js"></script>
+  <script src="EdgeRenderer.js"></script>
+  <script src="Sidebar.js"></script>
+  <script src="mindmap.js"></script>
+</body>
+</html>
